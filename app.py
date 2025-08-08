@@ -208,54 +208,91 @@ with st.spinner("Initializing AI model..."):
 # --- Two-Column Layout ---
 col1, col2 = st.columns([1, 1], gap="large")
 
-# --- LEFT COLUMN: INPUTS ---
-with col1:
-    st.header("Controls")
-    
-    uploaded_file = st.file_uploader(
-        "Upload a document", type=["pdf", "docx"])
-
-    query = st.text_input("Enter your question",
-                          placeholder="e.g., What are the key conclusions?")
-    submit_button = st.button("Generate Response")
 # --- RIGHT COLUMN: OUTPUTS ---
 with col2:
     st.header("Result")
 
     if submit_button:
-        if not GROQ_API_KEY :
+        # Corrected and simplified logic for file upload only
+        if not GROQ_API_KEY or GROQ_API_KEY == "YOUR_GROQ_API_KEY_HERE":
             st.error("⚠️ Please add your Groq API key. See instructions in the code.")
+        elif not uploaded_file:
+            st.error("⚠️ Please upload a document.")
         elif not query:
             st.error("⚠️ Please enter a question.")
         else:
-            input_source = None
-            input_type = ""
-            is_valid_input = False
+            # All checks passed, so we can process the query
+            with st.spinner("🤖 Analyzing document and generating answer..."):
+                st.session_state.result = process_query(
+                    GROQ_API_KEY,
+                    uploaded_file,
+                    query,
+                    embedding_model
+                )
 
-            if input_method == "Upload a File":
-                if uploaded_file:
-                    input_source = uploaded_file
-                    input_type = "upload"
-                    is_valid_input = True
-                else:
-                    st.error("⚠️ Please upload a document.")
-            else:  # From URL
-                if url_input:
-                    input_source = url_input
-                    input_type = "url"
-                    is_valid_input = True
-                else:
-                    st.error("⚠️ Please enter a URL.")
+    if st.session_state.result:
+        result = st.session_state.result
+        if "error" in result:
+            st.error(f"❌ Error: {result['error']}")
+        else:
+            # --- STRUCTURED DISPLAY LOGIC ---
+            st.success("✅ Analysis Complete!")
 
-            if is_valid_input:
-                with st.spinner("🤖 Analyzing document and generating answer..."):
-                    st.session_state.result = process_query(
-                        GROQ_API_KEY,
-                        input_source,
-                        input_type,
-                        query,
-                        embedding_model
-                    )
+            st.markdown("#### Explanation")
+            st.write(result.get('explanation', 'No explanation was provided.'))
+
+            with st.expander("View Source Clause & Page Number"):
+                st.markdown("##### Relevant Clause")
+                st.markdown(f"> {result.get('relevant_clause', 'No relevant clause was found.')}")
+
+                st.markdown("##### Page Number")
+                page_num = result.get('page_number', 'N/A')
+                st.info(f"**Found on Page:** {page_num}")
+    else:
+        st.info("The result will appear here once you submit a query.")
+# --- RIGHT COLUMN: OUTPUTS ---
+# --- RIGHT COLUMN: OUTPUTS ---
+with col2:
+    st.header("Result")
+
+    if submit_button:
+        # Corrected and simplified logic for file upload only
+        if not GROQ_API_KEY :
+            st.error("⚠️ Please add your Groq API key. See instructions in the code.")
+        elif not uploaded_file:
+            st.error("⚠️ Please upload a document.")
+        elif not query:
+            st.error("⚠️ Please enter a question.")
+        else:
+            # All checks passed, so we can process the query
+            with st.spinner("🤖 Analyzing document and generating answer..."):
+                st.session_state.result = process_query(
+                    GROQ_API_KEY,
+                    uploaded_file,
+                    query,
+                    embedding_model
+                )
+
+    if st.session_state.result:
+        result = st.session_state.result
+        if "error" in result:
+            st.error(f"❌ Error: {result['error']}")
+        else:
+            # --- STRUCTURED DISPLAY LOGIC ---
+            st.success("✅ Analysis Complete!")
+
+            st.markdown("#### Explanation")
+            st.write(result.get('explanation', 'No explanation was provided.'))
+
+            with st.expander("View Source Clause & Page Number"):
+                st.markdown("##### Relevant Clause")
+                st.markdown(f"> {result.get('relevant_clause', 'No relevant clause was found.')}")
+
+                st.markdown("##### Page Number")
+                page_num = result.get('page_number', 'N/A')
+                st.info(f"**Found on Page:** {page_num}")
+    else:
+        st.info("The result will appear here once you submit a query.")
 
     if st.session_state.result:
         result = st.session_state.result
@@ -281,4 +318,5 @@ with col2:
 
     else:
         st.info("The result will appear here once you submit a query.")
+
 
