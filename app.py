@@ -217,7 +217,7 @@ def load_embedding_model():
 
 
 # --- Header ---
-st.title("🤖 DocuQuery AI")
+st.title("🤖 Query Sphere")
 st.markdown("<p style='text-align: center; color: #D1D5DB;'>Upload a document or provide a URL, ask a question, and get an AI-powered JSON response.</p>", unsafe_allow_html=True)
 
 # --- Model Loading ---
@@ -297,4 +297,5 @@ with col2:
             st.success("✅ Query processed successfully!")
             st.json(result)
     else:
+
         st.info("The JSON result will appear here once you submit a query.")
