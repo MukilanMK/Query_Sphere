@@ -199,7 +199,7 @@ def load_embedding_model():
 
 # --- Header ---
 st.title("🤖 Query Sphere")
-st.markdown("<p style='text-align: center; color: #D1D5DB;'>Upload a document or provide a URL, ask a question, and get an AI-powered response.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #D1D5DB;'>Upload a document, ask a question, and get an AI-powered response.</p>", unsafe_allow_html=True)
 
 # --- Model Loading ---
 with st.spinner("Initializing AI model..."):
@@ -213,7 +213,7 @@ with col1:
     st.header("Controls")
     
     uploaded_file = st.file_uploader(
-        "Upload a document", type=["pdf", "docx", "eml"])
+        "Upload a document", type=["pdf", "docx"])
 
     query = st.text_input("Enter your question",
                           placeholder="e.g., What are the key conclusions?")
@@ -281,3 +281,4 @@ with col2:
 
     else:
         st.info("The result will appear here once you submit a query.")
+
