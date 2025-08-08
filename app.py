@@ -12,21 +12,6 @@ from groq import Groq
 import requests  # For fetching files from URLs
 
 # --- Backend Functions ---
-
-def fetch_file_from_url(url: str) -> bytes | None:
-    """Downloads a file's content from a public URL."""
-    try:
-        # Some servers block requests without a user-agent
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers, timeout=15)
-        # Raises an HTTPError for bad responses (4xx or 5xx)
-        response.raise_for_status()
-        return response.content
-    except requests.exceptions.RequestException as e:
-        print(f"ERROR: Failed to fetch file from URL: {url}\nDetails: {e}")
-        return None
-
-
 def extract_text_from_document(file_bytes: bytes, file_name: str) -> list[dict] | None:
     """Extracts text chunks from a file's bytes based on its name."""
     text_chunks = []
@@ -37,7 +22,7 @@ def extract_text_from_document(file_bytes: bytes, file_name: str) -> list[dict] 
                 blocks = page.get_text("blocks")
                 for block in blocks:
                     text = block[4].replace('\n', ' ').strip()
-                    if len(text) > 40:
+                    if len(text) > 40: # Filter out very short text blocks
                         text_chunks.append(
                             {"text": text, "page": page_num + 1})
 
@@ -109,25 +94,16 @@ def synthesize_answer_with_groq(client, query: str, retrieved_clauses: list[dict
         return None
 
 
-def process_query(api_key: str, input_source, input_type: str, query: str, embedding_model) -> dict:
-    """Main processing pipeline that handles either a file upload or a URL."""
+def process_query(api_key: str, uploaded_file, query: str, embedding_model) -> dict:
+    """Main processing pipeline for an uploaded file."""
     try:
         client = Groq(api_key=api_key)
     except Exception as e:
         return {"error": f"Failed to initialize Groq client. Details: {e}"}
 
-    file_bytes = None
-    file_name = ""
-
-    if input_type == 'upload':
-        file_bytes = input_source.getvalue()
-        file_name = input_source.name
-    elif input_type == 'url':
-        file_bytes = fetch_file_from_url(input_source)
-        if not file_bytes:
-            return {"error": "Failed to download the file from the URL. Please check if the URL is correct and public."}
-        # Infer filename from URL
-        file_name = input_source.split('/')[-1].split('?')[0]
+    # Simplified to directly use the uploaded_file object
+    file_bytes = uploaded_file.getvalue()
+    file_name = uploaded_file.name
 
     document_chunks_with_metadata = extract_text_from_document(
         file_bytes, file_name)
@@ -137,11 +113,11 @@ def process_query(api_key: str, input_source, input_type: str, query: str, embed
     document_texts = [chunk['text']
                       for chunk in document_chunks_with_metadata]
     index = create_faiss_index(document_texts, embedding_model)
-    if not index:
+    if index is None:
         return {"error": "Failed to create document embeddings."}
 
     query_embedding = embedding_model.encode([query])
-    k = 3
+    k = 3  # Retrieve top 3 most relevant chunks
     distances, indices = index.search(
         np.array(query_embedding).astype('float32'), k)
     retrieved_clauses = [document_chunks_with_metadata[i]
@@ -157,16 +133,21 @@ def process_query(api_key: str, input_source, input_type: str, query: str, embed
     except json.JSONDecodeError:
         return {"error": "The AI model failed to return valid JSON."}
 
-
 # --- Streamlit UI ---
 
 # --- API Key Config ---
-# IMPORTANT: Replace the placeholder with your actual key.
-GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+# For deployment, it's recommended to use st.secrets for your API key.
+# Create a file .streamlit/secrets.toml and add:
+# GROQ_API_KEY = "YOUR_GROQ_API_KEY_HERE"
+try:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+except (FileNotFoundError, KeyError):
+    # Fallback for local development if secrets file is not found
+    GROQ_API_KEY = "YOUR_GROQ_API_KEY_HERE" # Replace with your key for local testing
 
 # --- Page Setup ---
 st.set_page_config(
-    page_title="querysphere",
+    page_title="Query Sphere",
     page_icon="🤖",
     layout="wide"
 )
@@ -218,7 +199,7 @@ def load_embedding_model():
 
 # --- Header ---
 st.title("🤖 Query Sphere")
-st.markdown("<p style='text-align: center; color: #D1D5DB;'>Upload a document or provide a URL, ask a question, and get an AI-powered JSON response.</p>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #D1D5DB;'>Upload a document or provide a URL, ask a question, and get an AI-powered response.</p>", unsafe_allow_html=True)
 
 # --- Model Loading ---
 with st.spinner("Initializing AI model..."):
@@ -230,33 +211,20 @@ col1, col2 = st.columns([1, 1], gap="large")
 # --- LEFT COLUMN: INPUTS ---
 with col1:
     st.header("Controls")
-    input_method = st.radio(
-        "Choose document source:",
-        ("Upload a File", "From a URL"),
-        horizontal=True
-    )
-
-    uploaded_file = None
-    url_input = ""
-
-    if input_method == "Upload a File":
-        uploaded_file = st.file_uploader(
-            "Select a document", type=["pdf", "docx", "eml"])
-    else:
-        url_input = st.text_input(
-            "Enter document URL", placeholder="https://example.com/document.pdf")
+    
+    uploaded_file = st.file_uploader(
+        "Upload a document", type=["pdf", "docx", "eml"])
 
     query = st.text_input("Enter your question",
                           placeholder="e.g., What are the key conclusions?")
     submit_button = st.button("Generate Response")
-
 # --- RIGHT COLUMN: OUTPUTS ---
 with col2:
     st.header("Result")
 
     if submit_button:
-        if not GROQ_API_KEY or GROQ_API_KEY == "YOUR_GROQ_API_KEY_HERE":
-            st.error("⚠️ Please add your Groq API key to the `app.py` script.")
+        if not GROQ_API_KEY :
+            st.error("⚠️ Please add your Groq API key. See instructions in the code.")
         elif not query:
             st.error("⚠️ Please enter a question.")
         else:
@@ -294,8 +262,22 @@ with col2:
         if "error" in result:
             st.error(f"❌ Error: {result['error']}")
         else:
-            st.success("✅ Query processed successfully!")
-            st.json(result)
-    else:
+            # --- STRUCTURED DISPLAY LOGIC ---
+            st.success("✅ Analysis Complete!")
 
-        st.info("The JSON result will appear here once you submit a query.")
+            st.markdown("#### Explanation")
+            # Use .get() for safety in case the key is missing from the response
+            st.write(result.get('explanation', 'No explanation was provided.'))
+
+            # Use an expander to neatly show the source material
+            with st.expander("View Source Clause & Page Number"):
+                st.markdown("##### Relevant Clause")
+                # Use a blockquote for the extracted clause
+                st.markdown(f"> {result.get('relevant_clause', 'No relevant clause was found.')}")
+
+                st.markdown("##### Page Number")
+                page_num = result.get('page_number', 'N/A')
+                st.info(f"**Found on Page:** {page_num}")
+
+    else:
+        st.info("The result will appear here once you submit a query.")
